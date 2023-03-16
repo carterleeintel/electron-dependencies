@@ -1,7 +1,6 @@
 const fs = require('fs');
 const https = require('https');
 const HttpsProxyAgent = require('https-proxy-agent');
-const releases = require('electron-releases');
 const { join } = require('path');
 const url = require('url');
 const { spawnSync } = require('child_process');
@@ -114,16 +113,16 @@ function debugLog(...msgs) {
 }
 
 function getChromeVersion(release) {
-  const chromeVersion = release.deps.chrome;
+  const chromeVersion = release.chrome;
   if (!chromeVersion) {
     throw 'Chrome version not detected';
   }
   return chromeVersion;
 }
 
-function getRelease(tag) {
-  debugLog('Finding electron release with tag', `v${tag}`);
-  const release = releases.find(release => release.tag_name === `v${tag}`);
+function getRelease(releases, tag) {
+  debugLog('Finding electron release with tag', `${tag}`);
+  const release = releases.find(release => release.version === `${tag}`);
 
   if (release === undefined) {
     console.error('Could not find electron release matching', argv._[0]);
@@ -353,14 +352,19 @@ function getPdfiumComponents(chromiumVersion) {
 async function main() {
   checkArgs();
 
-  let tag = getTagFromArg();
+  const releasesUrl = "https://releases.electronjs.org/releases.json";
+  const localReleasesFilename = join(__dirname, 'releases.json');
+  fs.writeFileSync(localReleasesFilename, '');
+  await downloadFile(releasesUrl, localReleasesFilename, { flags: 'a' });
+  const releases = JSON.parse(fs.readFileSync('releases.json', 'utf-8'))
 
-  const release = getRelease(tag);
+  let tag = getTagFromArg();
+  const release = getRelease(releases, tag);
 
   const chromiumVersion = getChromeVersion(release);
   chromiumUrl = `https://chromium.googlesource.com/chromium/src.git/+/refs/tags/${chromiumVersion}/`;
   dependencies = {
-    version: release.deps.version,
+    version: release.version,
     deps: {
       chromium: {
         version: chromiumVersion,
@@ -368,15 +372,15 @@ async function main() {
         deps: {},
       },
       node: {
-        version: release.deps.node,
-        url: `https://github.com/nodejs/node/tree/v${release.deps['node']}/deps`,
+        version: release.node,
+        url: `https://github.com/nodejs/node/tree/v${release['node']}/deps`,
         deps: {
-          ...nodeReleases[release.deps.node],
+          ...nodeReleases[release.node],
           // Electron specific overrides deviating from upstream Node.js versions
-          'v8': release.deps.v8,
-          'uv': release.deps.uv,
-          'zlib': release.deps.zlib,
-          'openssl': release.deps.openssl,
+          'v8': release.v8,
+          'uv': release.uv,
+          'zlib': release.zlib,
+          'openssl': release.openssl,
         },
       },
     },
@@ -402,7 +406,7 @@ async function main() {
   chromiumDependencyMap = JSON.parse(fs.readFileSync(join(__dirname, 'chromium_deps.json')));
 
   // get more data for specific deps
-  debugLog('Node.js deps page:', `https://github.com/nodejs/node/tree/v${release.deps['node']}/deps`);
+  debugLog('Node.js deps page:', `https://github.com/nodejs/node/tree/v${release['node']}/deps`);
 
   debugLog('\nThird party component repos:');
   // iterate and show links to any defined component

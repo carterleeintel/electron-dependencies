@@ -104,6 +104,7 @@ dist
 .tern-port
 
 # electron-dependencies specific files
+releases.json
 chromium_deps.json
 chromium_deps.py
 __pycache__
